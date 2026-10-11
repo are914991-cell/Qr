@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>مولّد رموز QR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Arabic:wght@400;500;700&display=swap">
+<style>
+  /* Layout: one centered column on phones; form and live preview side by side from 760px. Preview comes first on narrow screens. */
+  :root {
+    --bg: #eef1f4;
+    --surface: #ffffff;
+    --field: #f6f8fa;
+    --fg: #10171e;
+    --muted: #55626e;
+    --line: #d5dce2;
+    --accent: #c2410c;
+    --accent-fg: #ffffff;
+    --warn: #8a5a00;
+    --warn-bg: #fff4d6;
+    --f-body: "IBM Plex Sans Arabic", system-ui, "Segoe UI", Tahoma, sans-serif;
+    --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1217; --surface: #151c23; --field: #1b242d; --fg: #e8edf1; --muted: #93a1ad;
+      --line: #2a3540; --accent: #ff8a4c; --accent-fg: #1a0e06; --warn: #f3c969; --warn-bg: #2d2411;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1217; --surface: #151c23; --field: #1b242d; --fg: #e8edf1; --muted: #93a1ad;
+    --line: #2a3540; --accent: #ff8a4c; --accent-fg: #1a0e06; --warn: #f3c969; --warn-bg: #2d2411;
+    color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.6; }
+  body { margin: 0; }
+  [hidden] { display: none !important; }
+  * { box-sizing: border-box; }
+  .app { max-width: 920px; margin-inline: auto; padding-inline: 16px; padding-block: 24px 40px; }
+  header { display: flex; flex-direction: column; gap: 4px; margin-block-end: 20px; }
+  h1 { margin: 0; font-size: 1.75rem; font-weight: 700; line-height: 1.2; text-wrap: balance; }
+  header p { margin: 0; color: var(--muted); max-width: 52ch; }
+
+  .tabs { display: flex; gap: 8px; overflow-x: auto; padding-block-end: 6px; margin-block-end: 16px; scrollbar-width: thin; }
+  .tab { flex: 0 0 auto; font: inherit; font-weight: 500; color: var(--fg); background: var(--surface); border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 16px; min-height: 40px; cursor: pointer; }
+  .tab:hover { border-color: var(--muted); }
+  .tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 700; }
+  .tab:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  .grid > * { min-width: 0; }
+  .preview { order: -1; }
+  @media (min-width: 760px) {
+    .grid { grid-template-columns: minmax(0, 1fr) 330px; align-items: start; }
+    .preview { order: 0; position: sticky; top: 16px; }
+  }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+  .panel h2 { margin: 0; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label, .opt label { font-size: 0.88rem; font-weight: 500; }
+  input[type="text"], input[type="tel"], input[type="email"], input[type="url"], textarea, select {
+    width: 100%; font: inherit; color: var(--fg); background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-height: 44px; }
+  textarea { min-height: 110px; resize: vertical; }
+  input[dir="ltr"] { text-align: left; }
+  .check { flex-direction: row; align-items: center; gap: 10px; }
+  .check input { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; }
+
+  .row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .opt { display: flex; flex-direction: column; gap: 6px; }
+  input[type="color"] { width: 100%; height: 44px; padding: 3px; background: var(--field); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+
+  .stage { display: grid; place-items: center; min-height: 250px; background: var(--field); border: 1px dashed var(--line); border-radius: 10px; padding: 16px; }
+  canvas#qr { width: 100%; max-width: 270px; height: auto; aspect-ratio: 1; border-radius: 4px; image-rendering: pixelated; }
+  .empty { color: var(--muted); text-align: center; max-width: 24ch; }
+  .meta { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 0.82rem; }
+  .meta span { font-family: var(--f-mono); direction: ltr; }
+  .payload { font-family: var(--f-mono); font-size: 0.78rem; direction: ltr; text-align: left; background: var(--field); border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 10px; max-height: 96px; overflow: auto; overflow-wrap: anywhere; white-space: pre-wrap; user-select: all; }
+  .actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .btn { font: inherit; font-weight: 700; min-height: 44px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; padding: 8px 12px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  .btn.wide { grid-column: 1 / -1; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .note { font-size: 0.85rem; color: var(--warn); background: var(--warn-bg); border-radius: 8px; padding: 8px 12px; margin: 0; }
+  .status { min-height: 0; font-size: 0.85rem; color: var(--muted); margin: 0; }
+  @media (prefers-reduced-motion: no-preference) { .tab, .btn { transition: background-color .15s, border-color .15s; } }
+</style>
+
+</head><body>
+<main class="app" dir="rtl" lang="ar">
+  <header>
+    <h1>مولّد رموز QR</h1>
+    <p>اختار النوع، اكتب البيانات، والرمز يتحدّث قدامك على طول. بعدها نزّله صورة أو ملف SVG.</p>
+  </header>
+
+  <div class="tabs" role="tablist" id="tabs" aria-label="نوع الرمز"></div>
+
+  <div class="grid">
+    <section class="panel" aria-labelledby="h-data">
+      <h2 id="h-data">البيانات</h2>
+      <div id="fields" style="display:flex;flex-direction:column;gap:14px"></div>
+
+      <h2>الشكل</h2>
+      <div class="row">
+        <div class="opt"><label for="size">الحجم عند التحميل</label>
+          <select id="size">
+            <option value="256">صغير 256</option>
+            <option value="512" selected>متوسط 512</option>
+            <option value="1024">كبير 1024</option>
+            <option value="2048">طباعة 2048</option>
+          </select></div>
+        <div class="opt"><label for="ec">تصحيح الأخطاء</label>
+          <select id="ec">
+            <option value="L">منخفض (7%)</option>
+            <option value="M" selected>متوسط (15%)</option>
+            <option value="Q">عالي (25%)</option>
+            <option value="H">أعلى (30%)</option>
+          </select></div>
+        <div class="opt"><label for="fg">لون الرمز</label><input type="color" id="fg" value="#000000"></div>
+        <div class="opt"><label for="bg">لون الخلفية</label><input type="color" id="bg" value="#ffffff"></div>
+      </div>
+      <p class="note" id="contrast" hidden>التباين بين اللونين ضعيف. اجعل الرمز أغمق من الخلفية عشان الكاميرا تقرأه بسهولة.</p>
+    </section>
+
+    <aside class="panel preview" aria-label="معاينة الرمز">
+      <div class="stage">
+        <canvas id="qr" width="300" height="300" role="img" aria-label="رمز QR" hidden></canvas>
+        <p class="empty" id="empty">اكتب البيانات المطلوبة وهيظهر الرمز هنا.</p>
+      </div>
+      <div class="meta"><span id="dims">—</span><span id="len">0 bytes</span></div>
+      <div class="payload" id="payload" aria-label="المحتوى المشفّر" hidden></div>
+      <div class="actions">
+        <button class="btn primary" id="dl-png" disabled>تحميل PNG</button>
+        <button class="btn primary" id="dl-svg" disabled>تحميل SVG</button>
+        <button class="btn wide" id="share" disabled hidden>مشاركة / حفظ في الصور</button>
+        <button class="btn wide" id="show-img" disabled>عرض الصورة للحفظ</button>
+        <button class="btn wide" id="copy" disabled>نسخ المحتوى</button>
+        <button class="btn" id="nfc-write" disabled hidden>اكتب على NFC</button>
+        <button class="btn" id="nfc-read" hidden>اقرأ بطاقة NFC</button>
+      </div>
+      <div id="saveimg" hidden style="display:flex;flex-direction:column;gap:8px;align-items:center">
+        <img id="saveimg-el" alt="رمز QR جاهز للحفظ" style="max-width:100%;height:auto;border-radius:4px;border:1px solid var(--line)">
+        <p class="status" style="text-align:center">اضغط على الصورة مطوّلاً واختار «حفظ الصورة».</p>
+      </div>
+      <p class="status" id="nfc-info" hidden>NFC بيشتغل على أندرويد (متصفح كروم) بس، وبيحتاج بطاقة أو ملصق NFC فاضي. الواي فاي مش مدعوم على NFC هنا.</p>
+      <p class="note" id="nodl" hidden>زر التحميل مش متاح في العرض ده. استخدم «عرض الصورة للحفظ» وبعدها اضغط مطوّلاً على الصورة.</p>
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+    </aside>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ---------- helpers ----------
+  function digits(s) { return (s || '').replace(/\D/g, ''); }
+  function phone(s) { s = (s || '').trim(); var plus = s.charAt(0) === '+' ? '+' : ''; return plus + digits(s); }
+  function wifiEsc(s) { return (s || '').replace(/([\\;,:"])/g, '\\$1'); }
+  function vEsc(s) { return (s || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1'); }
+
+  // ---------- QR types ----------
+  var TYPES = [
+    { id: 'text', label: 'نص / رابط',
+      fields: [{ k: 'v', label: 'النص أو الرابط', kind: 'area', ph: 'https://example.com', val: 'https://example.com' }],
+      build: function (f) { return (f.v || '').trim(); } },
+
+    { id: 'wifi', label: 'واي فاي',
+      fields: [
+        { k: 'ssid', label: 'اسم الشبكة', kind: 'text', ph: 'Home-WiFi' },
+        { k: 'pass', label: 'كلمة السر', kind: 'text', dir: 'ltr', ph: '' },
+        { k: 'sec', label: 'نوع التشفير', kind: 'select', val: 'WPA',
+          opts: [['WPA', 'WPA / WPA2 / WPA3'], ['WEP', 'WEP'], ['nopass', 'بدون كلمة سر']] },
+        { k: 'hidden', label: 'الشبكة مخفية', kind: 'check' }
+      ],
+      build: function (f) {
+        if (!(f.ssid || '').trim()) return '';
+        var sec = f.sec || 'WPA';
+        var s = 'WIFI:T:' + sec + ';S:' + wifiEsc(f.ssid) + ';';
+        if (sec !== 'nopass') s += 'P:' + wifiEsc(f.pass) + ';';
+        if (f.hidden) s += 'H:true;';
+        return s + ';';
+      } },
+
+    { id: 'tel', label: 'اتصال',
+      fields: [{ k: 'n', label: 'رقم التليفون', kind: 'tel', dir: 'ltr', ph: '+201001234567' }],
+      build: function (f) { var n = phone(f.n); return digits(n).length >= 5 ? 'tel:' + n : ''; } },
+
+    { id: 'wa', label: 'واتساب',
+      fields: [
+        { k: 'n', label: 'رقم واتساب بكود الدولة', kind: 'tel', dir: 'ltr', ph: '201001234567' },
+        { k: 'msg', label: 'رسالة جاهزة (اختياري)', kind: 'area', ph: 'أهلاً، عايز أستفسر عن...' }
+      ],
+      build: function (f) {
+        var n = digits(f.n); if (n.length < 7) return '';
+        var m = (f.msg || '').trim();
+        return 'https://wa.me/' + n + (m ? '?text=' + encodeURIComponent(m) : '');
+      } },
+
+    { id: 'mail', label: 'إيميل',
+      fields: [
+        { k: 'to', label: 'عنوان الإيميل', kind: 'email', dir: 'ltr', ph: 'name@example.com' },
+        { k: 'sub', label: 'الموضوع (اختياري)', kind: 'text', ph: '' },
+        { k: 'body', label: 'نص الرسالة (اختياري)', kind: 'area', ph: '' }
+      ],
+      build: function (f) {
+        var to = (f.to || '').trim(); if (to.indexOf('@') < 1) return '';
+        var q = [];
+        if ((f.sub || '').trim()) q.push('subject=' + encodeURIComponent(f.sub.trim()));
+        if ((f.body || '').trim()) q.push('body=' + encodeURIComponent(f.body.trim()));
+        return 'mailto:' + to + (q.length ? '?' + q.join('&') : '');
+      } },
+
+    { id: 'vcard', label: 'جهة اتصال',
+      fields: [
+        { k: 'name', label: 'الاسم', kind: 'text', ph: '' },
+        { k: 'tel', label: 'التليفون', kind: 'tel', dir: 'ltr', ph: '+201001234567' },
+        { k: 'mail', label: 'الإيميل', kind: 'email', dir: 'ltr', ph: '' },
+        { k: 'org', label: 'الشركة', kind: 'text', ph: '' },
+        { k: 'url', label: 'الموقع', kind: 'url', dir: 'ltr', ph: 'https://' }
+      ],
+      build: function (f) {
+        var name = (f.name || '').trim(); if (!name) return '';
+        var L = ['BEGIN:VCARD', 'VERSION:3.0', 'FN:' + vEsc(name), 'N:;' + vEsc(name) + ';;;'];
+        if ((f.org || '').trim()) L.push('ORG:' + vEsc(f.org.trim()));
+        if (phone(f.tel)) L.push('TEL;TYPE=CELL:' + phone(f.tel));
+        if ((f.mail || '').trim()) L.push('EMAIL:' + f.mail.trim());
+        if ((f.url || '').trim()) L.push('URL:' + f.url.trim());
+        L.push('END:VCARD');
+        return L.join('\r\n');
+      } }
+  ];
+
+  // ---------- state ----------
+  var current = TYPES[0];
+  var values = {};
+  TYPES.forEach(function (t) {
+    values[t.id] = {};
+    t.fields.forEach(function (fl) { if (fl.val !== undefined) values[t.id][fl.k] = fl.val; });
+  });
+  var qr = null, payload = '', downloads = null, downloadsChecked = false;
+
+  // ---------- UI: tabs & fields ----------
+  var tabsEl = $('tabs');
+  TYPES.forEach(function (t) {
+    var b = document.createElement('button');
+    b.className = 'tab'; b.type = 'button'; b.id = 'tab-' + t.id;
+    b.setAttribute('role', 'tab'); b.textContent = t.label;
+    b.addEventListener('click', function () { select(t); });
+    tabsEl.appendChild(b);
+  });
+
+  function select(t) {
+    current = t;
+    TYPES.forEach(function (x) { $('tab-' + x.id).setAttribute('aria-selected', x === t ? 'true' : 'false'); });
+    renderFields();
+    update();
+  }
+
+  function renderFields() {
+    var host = $('fields'); host.innerHTML = '';
+    current.fields.forEach(function (fl) {
+      var id = 'f-' + current.id + '-' + fl.k;
+      var wrap = document.createElement('div');
+      wrap.className = 'field' + (fl.kind === 'check' ? ' check' : '');
+      var label = document.createElement('label'); label.htmlFor = id; label.textContent = fl.label;
+      var el;
+      if (fl.kind === 'area') { el = document.createElement('textarea'); el.dir = 'auto'; }
+      else if (fl.kind === 'select') {
+        el = document.createElement('select');
+        fl.opts.forEach(function (o) { var op = document.createElement('option'); op.value = o[0]; op.textContent = o[1]; el.appendChild(op); });
+      } else {
+        el = document.createElement('input');
+        el.type = fl.kind === 'check' ? 'checkbox' : fl.kind;
+        if (fl.kind === 'text' || fl.kind === 'tel' || fl.kind === 'email' || fl.kind === 'url') el.setAttribute('dir', fl.dir || 'auto');
+        if (fl.kind === 'tel') el.setAttribute('inputmode', 'tel');
+        if (fl.kind === 'text') el.autocomplete = 'off';
+      }
+      el.id = id;
+      if (fl.ph) el.placeholder = fl.ph;
+      var cur = values[current.id][fl.k];
+      if (fl.kind === 'check') el.checked = !!cur; else if (cur !== undefined) el.value = cur;
+      var evt = (fl.kind === 'select' || fl.kind === 'check') ? 'change' : 'input';
+      el.addEventListener(evt, function () {
+        values[current.id][fl.k] = fl.kind === 'check' ? el.checked : el.value;
+        if (fl.k === 'sec') syncWifi();
+        update();
+      });
+      if (fl.kind === 'check') { wrap.appendChild(el); wrap.appendChild(label); }
+      else { wrap.appendChild(label); wrap.appendChild(el); }
+      host.appendChild(wrap);
+    });
+    syncWifi();
+  }
+
+  function syncWifi() {
+    if (current.id !== 'wifi') return;
+    var p = $('f-wifi-pass');
+    if (p) p.closest('.field').hidden = (values.wifi.sec === 'nopass');
+  }
+
+  // ---------- QR drawing ----------
+  var QUIET = 4;
+
+  function make(text, ec) {
+    if (typeof qrcode === 'undefined') throw new Error('lib');
+    qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
+    var q = qrcode(0, ec);
+    q.addData(text);
+    q.make();
+    return q;
+  }
+
+  function draw(cv, target) {
+    var n = qr.getModuleCount(), tot = n + QUIET * 2;
+    var cell = Math.max(1, Math.floor(target / tot)), px = cell * tot;
+    cv.width = px; cv.height = px;
+    var ctx = cv.getContext('2d');
+    ctx.fillStyle = $('bg').value; ctx.fillRect(0, 0, px, px);
+    ctx.fillStyle = $('fg').value;
+    for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) {
+      if (qr.isDark(r, c)) ctx.fillRect((c + QUIET) * cell, (r + QUIET) * cell, cell, cell);
+    }
+    return px;
+  }
+
+  function svgString(size) {
+    var n = qr.getModuleCount(), tot = n + QUIET * 2, d = '';
+    for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) {
+      if (qr.isDark(r, c)) d += 'M' + (c + QUIET) + ' ' + (r + QUIET) + 'h1v1h-1z';
+    }
+    return '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + tot + ' ' + tot +
+      '" width="' + size + '" height="' + size + '" shape-rendering="crispEdges">' +
+      '<rect width="' + tot + '" height="' + tot + '" fill="' + $('bg').value + '"/>' +
+      '<path d="' + d + '" fill="' + $('fg').value + '"/></svg>';
+  }
+
+  function lum(hex) {
+    var v = [1, 3, 5].map(function (i) {
+      var x = parseInt(hex.substr(i, 2), 16) / 255;
+      return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  }
+
+  // ---------- update ----------
+  var emptyMsg = 'اكتب البيانات المطلوبة وهيظهر الرمز هنا.';
+  function setReady(on) {
+    ['dl-png', 'dl-svg'].forEach(function (id) { $(id).disabled = !on || !downloads; });
+    $('copy').disabled = !on;
+    $('show-img').disabled = !on;
+    $('share').disabled = !on;
+    $('nfc-write').disabled = !on;
+    $('nodl').hidden = !!downloads || !downloadsChecked;
+    if (!on) $('saveimg').hidden = true;
+    $('qr').hidden = !on; $('payload').hidden = !on;
+    $('empty').hidden = on;
+  }
+
+  function update() {
+    $('status').textContent = '';
+    var l1 = lum($('fg').value), l2 = lum($('bg').value);
+    var ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    $('contrast').hidden = !(ratio < 3 || l1 > l2);
+
+    payload = current.build(values[current.id]);
+    if (!payload) { qr = null; $('empty').textContent = emptyMsg; $('dims').textContent = '—'; $('len').textContent = '0 bytes'; setReady(false); return; }
+    try { qr = make(payload, $('ec').value); }
+    catch (e) {
+      qr = null; setReady(false); $('dims').textContent = '—';
+      $('empty').textContent = (e && e.message === 'lib')
+        ? 'تعذّر تحميل مكتبة الرموز. أعد فتح الصفحة.'
+        : 'المحتوى أطول من سعة الرمز. قصّر النص أو قلّل تصحيح الأخطاء.';
+      return;
+    }
+    draw($('qr'), 560);
+    var n = qr.getModuleCount();
+    $('dims').textContent = n + ' × ' + n;
+    $('len').textContent = new TextEncoder().encode(payload).length + ' bytes';
+    $('payload').textContent = payload;
+    setReady(true);
+    if (!$('saveimg').hidden) refreshImg();
+  }
+
+  function refreshImg() {
+    if (!qr) return;
+    var cv = document.createElement('canvas');
+    draw(cv, Math.min(parseInt($('size').value, 10), 1024));
+    $('saveimg-el').src = cv.toDataURL('image/png');
+  }
+
+  // ---------- actions ----------
+  function say(t) { $('status').textContent = t; }
+
+  function save(filename, data) {
+    if (!downloads) return;
+    downloads.save({ filename: filename, data: data }).then(
+      function () { say('تم التحميل. شوفه في مجلد التنزيلات (Downloads).'); },
+      function (e) {
+        if (e && e.code === 'declined') say('لم يتم الحفظ.');
+        else say('تعذّر الحفظ (' + ((e && e.code) || 'خطأ') + '). جرّب «عرض الصورة للحفظ».');
+      }
+    );
+  }
+
+  // ---------- NFC (Web NFC: Chrome on Android, secure context) ----------
+  var hasNfc = 'NDEFReader' in window;
+  if (hasNfc) { $('nfc-write').hidden = false; $('nfc-read').hidden = false; }
+  $('nfc-info').hidden = false;
+  if (!hasNfc) $('nfc-info').textContent = 'NFC مش متاح في المتصفح ده. افتح الملف في كروم على تليفون أندرويد فيه NFC. الآيفون مش بيدعم كتابة NFC من المتصفح.';
+
+  function nfcRecords() {
+    var id = current.id;
+    if (!payload) return null;
+    if (id === 'wifi') return 'wifi';
+    if (id === 'vcard') return [{ recordType: 'mime', mediaType: 'text/vcard', data: new TextEncoder().encode(payload) }];
+    if (id === 'tel' || id === 'wa' || id === 'mail') return [{ recordType: 'url', data: payload }];
+    if (/^https?:\/\/\S+$/i.test(payload)) return [{ recordType: 'url', data: payload }];
+    return [{ recordType: 'text', data: payload }];
+  }
+  function nfcErr(e) {
+    var n = e && e.name;
+    if (n === 'NotAllowedError') return 'الإذن مرفوض. اسمح بـ NFC للصفحة، وتأكد إنها مفتوحة من رابط https.';
+    if (n === 'NotSupportedError') return 'التليفون مفيهوش NFC أو مقفول. فعّله من الإعدادات.';
+    if (n === 'NotReadableError') return 'مقدرتش أقرأ البطاقة. قرّبها تاني.';
+    if (n === 'AbortError') return 'اتلغت العملية.';
+    return 'حصلت مشكلة في NFC (' + (n || 'خطأ') + ').';
+  }
+  $('nfc-write').addEventListener('click', function () {
+    var recs = nfcRecords();
+    if (recs === 'wifi') { say('كتابة الواي فاي على NFC مش مدعومة هنا. استخدم رمز QR.'); return; }
+    if (!recs) return;
+    if (!window.isSecureContext) { say('NFC محتاج صفحة مفتوحة من رابط https.'); return; }
+    var ndef = new NDEFReader();
+    say('قرّب بطاقة NFC من ضهر التليفون وخلّيها ثابتة...');
+    ndef.write({ records: recs }).then(
+      function () { say('تمت الكتابة على البطاقة.'); },
+      function (e) { say(nfcErr(e)); }
+    );
+  });
+  $('nfc-read').addEventListener('click', function () {
+    if (!window.isSecureContext) { say('NFC محتاج صفحة مفتوحة من رابط https.'); return; }
+    var ndef = new NDEFReader();
+    ndef.scan().then(function () {
+      say('قرّب البطاقة من ضهر التليفون...');
+      ndef.onreading = function (ev) {
+        var out = [];
+        ev.message.records.forEach(function (r) {
+          var t = '';
+          try { t = new TextDecoder(r.encoding || 'utf-8').decode(r.data); } catch (x) { t = '(بيانات غير نصية)'; }
+          out.push(r.recordType + ': ' + t);
+        });
+        say('اتقرأ: ' + (out.join(' | ') || 'بطاقة فاضية'));
+      };
+    }, function (e) { say(nfcErr(e)); });
+  });
+
+  if (navigator.canShare && typeof File === 'function') {
+    try { if (navigator.canShare({ files: [new File(['x'], 'a.png', { type: 'image/png' })] })) $('share').hidden = false; } catch (e) {}
+  }
+  $('share').addEventListener('click', function () {
+    if (!qr) return;
+    var cv = document.createElement('canvas');
+    draw(cv, Math.min(parseInt($('size').value, 10), 1024));
+    cv.toBlob(function (b) {
+      if (!b) { say('تعذّر إنشاء الصورة.'); return; }
+      var f = new File([b], 'qr-code.png', { type: 'image/png' });
+      navigator.share({ files: [f], title: 'رمز QR' }).then(
+        function () { say('تمت المشاركة.'); },
+        function (e) { if (!e || e.name !== 'AbortError') say('تعذّرت المشاركة. استخدم تحميل PNG.'); }
+      );
+    }, 'image/png');
+  });
+
+  $('show-img').addEventListener('click', function () {
+    if (!qr) return;
+    var box = $('saveimg');
+    box.hidden = !box.hidden;
+    if (!box.hidden) { refreshImg(); box.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+  });
+  $('size').addEventListener('change', function () { if (!$('saveimg').hidden) refreshImg(); });
+
+  $('dl-png').addEventListener('click', function () {
+    if (!qr) return;
+    var cv = document.createElement('canvas');
+    draw(cv, parseInt($('size').value, 10));
+    cv.toBlob(function (b) { if (b) save('qr-code.png', b); else say('تعذّر إنشاء الصورة.'); }, 'image/png');
+  });
+  $('dl-svg').addEventListener('click', function () {
+    if (!qr) return;
+    save('qr-code.svg', svgString(parseInt($('size').value, 10)));
+  });
+  $('copy').addEventListener('click', function () {
+    if (!payload) return;
+    var fallback = function () {
+      var r = document.createRange(); r.selectNodeContents($('payload'));
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      say('المحتوى متحدد، انسخه من القائمة.');
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(payload).then(function () { say('تم النسخ.'); }, fallback);
+    } else fallback();
+  });
+
+  ['ec', 'fg', 'bg'].forEach(function (id) { $(id).addEventListener('input', update); });
+
+  // ---------- boot ----------
+  select(TYPES[0]);
+  downloads = {
+    save: function (o) {
+      return new Promise(function (res, rej) {
+        try {
+          var b = o.data instanceof Blob ? o.data : new Blob([o.data], { type: /\.svg$/i.test(o.filename) ? 'image/svg+xml' : 'text/plain' });
+          var u = URL.createObjectURL(b), a = document.createElement('a');
+          a.href = u; a.download = o.filename; document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(function () { URL.revokeObjectURL(u); }, 5000);
+          res({ status: 'saved' });
+        } catch (e) { rej({ code: 'unavailable' }); }
+      });
+    }
+  };
+  downloadsChecked = true;
+  update();
+})();
+</script>
+
+</body></html>
